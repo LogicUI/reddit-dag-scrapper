@@ -113,10 +113,32 @@ class LLMAnalyzer:
                     message_content = response.choices[0].message.content
                     cleaned_content = message_content.strip()
 
-                    # Update the dataframe with analysis result
-                    df.at[idx, new_column] = cleaned_content
-                    print(f"Analysis result: {cleaned_content[:200]}...")
-                    break
+                    # Parse JSON response
+                    try:
+                        # Remove markdown code blocks if present
+                        if cleaned_content.startswith("```json"):
+                            cleaned_content = cleaned_content[7:]
+                        if cleaned_content.endswith("```"):
+                            cleaned_content = cleaned_content[:-3]
+                        cleaned_content = cleaned_content.strip()
+
+                        analysis = json.loads(cleaned_content)
+
+                        # Format as text with feature, description pairs
+                        formatted_text = []
+                        for feature, description in analysis.items():
+                            formatted_text.append(f"{feature}, {description}")
+
+                        # Join with newlines and update dataframe
+                        df.at[idx, new_column] = "\n".join(formatted_text)
+                        print(f"Analysis result: {formatted_text[:200]}...")
+                        break
+
+                    except json.JSONDecodeError:
+                        # If not JSON, store raw text
+                        df.at[idx, new_column] = cleaned_content
+                        print(f"Analysis result: {cleaned_content[:200]}...")
+                        break
 
                 except Exception as e:
                     if attempt < max_retries - 1:
@@ -201,7 +223,7 @@ class LLMAnalyzer:
         filtered_df = df[df["relevance_score"] >= 0.5]
 
         # Save analyzed data with -staging suffix
-        output_path = csv_path.rsplit('.', 1)[0] + '-staging.csv'
+        output_path = csv_path.rsplit(".", 1)[0] + "-staging.csv"
         filtered_df.to_csv(output_path, index=False)
         print(
             f"\nAnalysis complete. {len(filtered_df)} relevant entries saved to {output_path}"
@@ -213,9 +235,21 @@ if __name__ == "__main__":
     analyzer = LLMAnalyzer()
     analyzer.create_analyzed_column(
         "analyzed_journaling_comments.csv",
-        "ideal_features", 
-        "Analyze the following Reddit comment and identify ideal features for an AI journaling app based on the user's needs. Content: {content} Format your response as JSON with this key: - ideal_features: list of AI-powered features that could help address the user's needs",
-    )
+        "ideal_features",
+        """
+        Based on the following Reddit comment, suggest ideal features for an AI journaling app that would address the user's needs and preferences.
 
-    # analyzed_df = analyzer.analyze_dataframe()
-    # print(f"Total entries analyzed: {len(analyzed_df)}")
+        Content: {content}
+
+        Format your response as a list of features with descriptions, like:
+        Feature 1: Description 1
+        Feature 2: Description 2
+        etc.
+
+        Focus on features that would:
+        - Address pain points and challenges mentioned
+        - Enhance the benefits and gains described
+        - Help accomplish the jobs/tasks discussed
+        - Align with the user's journaling style and preferences
+        """,
+    )
