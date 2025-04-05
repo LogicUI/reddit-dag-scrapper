@@ -1,0 +1,9 @@
+apache-airflow
+pandas
+praw
+python-dotenv
+psycopg2-binary
+requests
+anthropic==0.49.0  # (or remove if not using Anthropic)
+openai
+psycopg2
